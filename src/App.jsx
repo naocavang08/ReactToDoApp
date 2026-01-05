@@ -1,37 +1,6 @@
 /* eslint-disable react-hooks/purity */
 import { useState, useEffect } from "react";
 
-function TodoItem({ todo, onToggle, onDelete }) {
-  return (
-    <li>
-      <input
-        type="checkbox"
-        checked={todo.done}
-        onChange={() => onToggle(todo.id)}
-      />
-      <span style={{ textDecoration: todo.done ? "line-through" : "none" }}>
-        {todo.text}
-      </span>
-      <button onClick={() => onDelete(todo.id)}>❌</button>
-    </li>
-  );
-}
-
-function TodoList({ todos, onToggle, onDelete }) {
-  return (
-    <ul>
-      {todos.map((todo) => (
-        <TodoItem
-          key={todo.id}
-          todo={todo}
-          onToggle={onToggle}
-          onDelete={onDelete}
-        />
-      ))}
-    </ul>
-  );
-}
-
 export default function TodoGame() {
   const [history, setHistory] = useState([[]]);
   const [currentStep, setCurrentStep] = useState(0);
