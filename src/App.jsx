@@ -2,23 +2,23 @@
 import { useState, useEffect } from "react";
 
 export default function TodoGame() {
-  const [history, setHistory] = useState([[]]);
-  const [currentStep, setCurrentStep] = useState(0);
+  const [history, setHistory] = useState(() => {
+    const saved = localStorage.getItem("todo-history");
+    return saved ? JSON.parse(saved) : [[]];
+  });
+
+  const [currentStep, setCurrentStep] = useState(() => {
+    const saved = localStorage.getItem("todo-step");
+    return saved ? Number(saved) : 0;
+  });
   const currentTodos = history[currentStep];
 
   const [text, setText] = useState("");
 
   useEffect(() => {
-    console.log("Todos changed:", currentTodos);
     localStorage.setItem("todo-history", JSON.stringify(history));
-  }, [history, currentTodos]);
-
-  useEffect(() => {
-    const saved = localStorage.getItem("todo-history");
-    if (saved) {
-      setHistory(JSON.parse(saved));
-    }
-  }, []);
+    localStorage.setItem("todo-step", currentStep);
+  }, [history, currentStep]);
 
   function addTodo() {
     if (!text.trim()) return;
