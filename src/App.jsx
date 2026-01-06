@@ -1,67 +1,94 @@
-/* eslint-disable react-hooks/purity */
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
+import ToDoApi from "./Api/ToDoApi";
+import { ToDoDto } from "./Dto/ToDoDto";
 
-export default function TodoGame() {
-  const [history, setHistory] = useState(() => {
-    const saved = localStorage.getItem("todo-history");
-    return saved ? JSON.parse(saved) : [[]];
-  });
-
-  const [currentStep, setCurrentStep] = useState(() => {
-    const saved = localStorage.getItem("todo-step");
-    return saved ? Number(saved) : 0;
-  });
-  const currentTodos = history[currentStep];
-
+export default function TodoApp() {
+  const [todos, setTodos] = useState([]);
   const [text, setText] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
-    localStorage.setItem("todo-history", JSON.stringify(history));
-    localStorage.setItem("todo-step", currentStep);
-  }, [history, currentStep]);
+    loadTodos();
+  }, []);
 
-  function addTodo() {
+  async function loadTodos() {
+    try {
+      setLoading(true);
+      const data = await ToDoApi.getAll();
+      setTodos(data);
+      setError(null);
+    } catch (err) {
+      setError('Failed to load todos');
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function addTodo() {
     if (!text.trim()) return;
 
-    const newTodos = [...currentTodos, { id: Date.now(), text, done: false }];
-
-    pushToHistory(newTodos);
-    setText("");
+    try {
+      const newTodoDto = new ToDoDto(0, text.trim(), false);
+      const createdTodo = await ToDoApi.create(newTodoDto);
+      
+      // Optimistic update - thêm vào state ngay
+      setTodos(prevTodos => [...prevTodos, createdTodo]);
+      setText("");
+      setError(null);
+    } catch (err) {
+      setError('Failed to add todo');
+      console.error(err);
+      // Reload nếu có lỗi
+      await loadTodos();
+    }
   }
 
-  function toggleTodo(id) {
-    const newTodos = currentTodos.map((todo) =>
-      todo.id === id ? { ...todo, done: !todo.done } : todo
+  async function toggleTodo(id) {
+    try {
+      const todo = todos.find(t => t.id === id);
+      if (!todo) return;
+
+      // Optimistic update
+      setTodos(prevTodos => 
+        prevTodos.map(t => 
+          t.id === id ? { ...t, isComplete: !t.isComplete } : t
+        )
+      );
+
+      const updatedTodo = new ToDoDto(todo.id, todo.name, !todo.isComplete);
+      await ToDoApi.update(id, updatedTodo);
+      setError(null);
+    } catch (err) {
+      setError('Failed to toggle todo');
+      console.error(err);
+      // Rollback nếu có lỗi
+      await loadTodos();
+    }
+  }
+
+  async function deleteTodo(id) {
+    try {
+      // Optimistic update
+      setTodos(prevTodos => prevTodos.filter(t => t.id !== id));
+      
+      await ToDoApi.delete(id);
+      setError(null);
+    } catch (err) {
+      setError('Failed to delete todo');
+      console.error(err);
+      // Rollback nếu có lỗi
+      await loadTodos();
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="todo-container">
+        <div className="todo-card">Loading...</div>
+      </div>
     );
-
-    pushToHistory(newTodos);
-  }
-
-  function deleteTodo(id) {
-    const newTodos = currentTodos.filter((todo) => todo.id !== id);
-    pushToHistory(newTodos);
-  }
-
-  function pushToHistory(newTodos) {
-    const nextHistory = [...history.slice(0, currentStep + 1), newTodos];
-    setHistory(nextHistory);
-    setCurrentStep(nextHistory.length - 1);
-  }
-
-  function jumpTo(step) {
-    setCurrentStep(step);
-  }
-
-  function undo() {
-    if (currentStep > 0) {
-      setCurrentStep(currentStep - 1);
-    }
-  }
-
-  function redo() {
-    if (currentStep < history.length - 1) {
-      setCurrentStep(currentStep + 1);
-    }
   }
 
   return (
@@ -69,59 +96,49 @@ export default function TodoGame() {
       <div className="todo-card">
         <h2>Todo App</h2>
 
-        <button
-          className="undo-btn"
-          onClick={undo}
-          disabled={currentStep === 0}
-        >
-          Undo
-        </button>
-
-        <button
-          className="redo-btn"
-          onClick={redo}
-          disabled={currentStep === history.length - 1}
-        >
-          Redo
-        </button>
+        {error && (
+          <div style={{ 
+            color: 'red', 
+            marginBottom: '10px', 
+            padding: '10px', 
+            backgroundColor: '#fee',
+            borderRadius: '4px' 
+          }}>
+            {error}
+          </div>
+        )}
 
         <div className="todo-input">
           <input
             value={text}
             onChange={(e) => setText(e.target.value)}
+            onKeyPress={(e) => e.key === 'Enter' && addTodo()}
             placeholder="Enter todo..."
           />
           <button onClick={addTodo}>Add</button>
         </div>
 
         <ul>
-          {currentTodos.map((todo) => (
+          {todos.map((todo) => (
             <li key={todo.id} className="todo-item">
               <input
                 type="checkbox"
-                checked={todo.done}
+                checked={todo.isComplete}
                 onChange={() => toggleTodo(todo.id)}
               />
-              <span className={`todo-text ${todo.done ? "done" : ""}`}>
-                {todo.text}
+              <span className={`todo-text ${todo.isComplete ? "done" : ""}`}>
+                {todo.name}
               </span>
               <button onClick={() => deleteTodo(todo.id)}>❌</button>
             </li>
           ))}
         </ul>
-      </div>
 
-      <div className="history-card">
-        <h3>History</h3>
-        <ol>
-          {history.map((_, index) => (
-            <li key={index}>
-              <button onClick={() => jumpTo(index)}>
-                {index === 0 ? "Start" : `Step ${index}`}
-              </button>
-            </li>
-          ))}
-        </ol>
+        {todos.length === 0 && (
+          <p style={{ textAlign: 'center', color: '#888', marginTop: '20px' }}>
+            No todos yet. Add one above!
+          </p>
+        )}
       </div>
     </div>
   );
